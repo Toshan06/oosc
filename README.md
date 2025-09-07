@@ -15,5 +15,3 @@ Detected objects are tracked uniquely, counted, and saved into a structured **JS
   - Unique item counts  
 
 ---
-
-## 📂 Project Structure  

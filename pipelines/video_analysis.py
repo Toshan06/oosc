@@ -1,83 +1,53 @@
-import cv2
-from ultralytics import YOLO
-from collections import Counter
 import json
 import os
+from collections import Counter
+from ultralytics import YOLO
 
-# -------------------------
-# Config
-# -------------------------
-VIDEO_PATH = "data/input_video.mp4"
-MODEL_PATH = YOLO("versions/yolov8n.pt")  # Pretrained YOLOv8n model
+VIDEO_PATH = "data/kitchen_data.mp4"
+MODEL_PATH = "versions/yolov8n.pt"
 OUTPUT_PATH = "output/report.json"
-FRAME_RATE = 2  # frames per second to process
+FRAME_SKIP = 5
 
-# Make sure output folder exists
 os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
-# -------------------------
-# Load YOLOv8 Model
-# -------------------------
+
 yolo_model = YOLO(MODEL_PATH)
 
-# -------------------------
-# Environment Classification by Object Mapping
-# -------------------------
 def classify_environment(objects):
-    if any(obj in objects for obj in ["bed", "sofa", "tv", "refrigerator", "microwave"]):
+    home_objs = {"bed", "sofa", "tv", "refrigerator", "microwave", "oven", "dining table", "chimney"}
+    shop_objs = {"shelf", "bottle", "box"}
+    office_objs = {"laptop", "keyboard", "chair", "desk"}
+    
+    if home_objs.intersection(objects):
         return "Home"
-    elif any(obj in objects for obj in ["shelf", "bottle", "box", "refrigerator"]):
+    elif shop_objs.intersection(objects):
         return "Shop"
-    elif any(obj in objects for obj in ["laptop", "keyboard", "chair", "desk"]):
+    elif office_objs.intersection(objects):
         return "Office"
     else:
         return "Unknown"
 
-# -------------------------
-# Video Processing
-# -------------------------
-cap = cv2.VideoCapture(VIDEO_PATH)
-fps = cap.get(cv2.CAP_PROP_FPS)
-interval = max(int(fps / FRAME_RATE), 1)
+print("Tracking objects across video...")
+results = yolo_model.track(source=VIDEO_PATH, show=False, persist=True)
 
-all_objects = []
-frame_count = 0
+unique_object_ids = {}
 
-print("Processing video frames...")
+for r in results:
+    names = r.names
+    for box in r.boxes:
+        obj_name = names[int(box.cls[0])]
+        obj_id = int(box.id[0])
+        if obj_name not in unique_object_ids:
+            unique_object_ids[obj_name] = set()
+        unique_object_ids[obj_name].add(obj_id)
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+object_counts = {obj: len(ids) for obj, ids in unique_object_ids.items()}
 
-    # Skip frames according to interval
-    if frame_count % interval == 0:
-        results = yolo_model(frame, verbose=False)
-        
-        for r in results:
-            names = r.names
-            for box in r.boxes:
-                cls_id = int(box.cls[0])
-                obj_name = names[cls_id]
-                all_objects.append(obj_name)
+environment = classify_environment(set(object_counts.keys()))
 
-    frame_count += 1
-
-cap.release()
-print(f"Processed {frame_count} frames, detected {len(all_objects)} objects.")
-
-# -------------------------
-# Aggregate and Classify
-# -------------------------
-object_counts = Counter(all_objects)
-environment = classify_environment(object_counts.keys())
-
-# -------------------------
-# Build JSON Report
-# -------------------------
 report = {
     "environment": environment,
-    "items": dict(object_counts)
+    "items": object_counts
 }
 
 with open(OUTPUT_PATH, "w") as f:
@@ -85,18 +55,3 @@ with open(OUTPUT_PATH, "w") as f:
 
 print(f"Report saved to {OUTPUT_PATH}")
 print(json.dumps(report, indent=4))
-
-import os
-
-# Set the output file path
-OUTPUT_PATH = "output/report.json"
-
-# Make sure the folder exists
-os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-
-# Later in the script, save JSON
-import json
-with open(OUTPUT_PATH, "w") as f:
-    json.dump(report, f, indent=4)
-
-print(f"Report saved to {OUTPUT_PATH}")

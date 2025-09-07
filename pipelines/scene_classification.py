@@ -1,17 +1,12 @@
-# Install dependencies first
-# pip install torch torchvision pillow
-
 import torch
 from torchvision import models, transforms
 from PIL import Image
 
-# Load pretrained Places365 ResNet18 model
 model = models.resnet18(num_classes=365)
 checkpoint = torch.hub.load('places365/places365', 'resnet18_places365')
 model.load_state_dict(checkpoint['state_dict'])
 model.eval()
 
-# Transformation for input image
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -19,20 +14,18 @@ transform = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
-# Map Places365 classes to simple environment labels
 home_classes = ['living_room', 'bedroom', 'kitchen']
 shop_classes = ['supermarket', 'store', 'bookstore']
 office_classes = ['office', 'conference_room']
 
 def classify_environment_places365(frame):
-    img = Image.fromarray(frame[..., ::-1])  # Convert BGR(OpenCV) to RGB
-    input_tensor = transform(img).unsqueeze(0)  # Add batch dimension
+    img = Image.fromarray(frame[..., ::-1])
+    input_tensor = transform(img).unsqueeze(0)
     with torch.no_grad():
         outputs = model(input_tensor)
     _, idx = torch.max(outputs, 1)
     predicted_class = idx.item()
     
-    # Map to Home / Shop / Office
     if predicted_class in home_classes:
         return "Home"
     elif predicted_class in shop_classes:
